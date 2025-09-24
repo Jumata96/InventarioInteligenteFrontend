@@ -1,36 +1,23 @@
-import { Button, Form, Input } from 'antd'
+import { Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+import DashboardLayout from "./layouts/DashboardLayout";
+import Products from "./pages/products/Products";
+import Orders from "./pages/orders/Orders";
 
-function App() {
-  const onFinish = (values) => {
-    console.log('Success:', values)
-  }
-
+export default function App() {
   return (
-    <div style={{ maxWidth: 400, margin: "50px auto" }}>
-      <h2>Login</h2>
-      <Form onFinish={onFinish}>
-        <Form.Item
-          name="email"
-          rules={[{ required: true, message: 'Por favor ingresa tu correo' }]}
-        >
-          <Input placeholder="Correo electrónico" />
-        </Form.Item>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
-        <Form.Item
-          name="password"
-          rules={[{ required: true, message: 'Por favor ingresa tu contraseña' }]}
-        >
-          <Input.Password placeholder="Contraseña" />
-        </Form.Item>
+      <Route path="/" element={<DashboardLayout />}>
+        <Route index element={<Navigate to="/products" replace />} />
+        <Route path="products" element={<Products />} />
+        <Route path="orders" element={<Orders />} />
+      </Route>
 
-        <Form.Item>
-          <Button type="primary" htmlType="submit" block>
-            Ingresar
-          </Button>
-        </Form.Item>
-      </Form>
-    </div>
-  )
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
 }
-
-export default App
