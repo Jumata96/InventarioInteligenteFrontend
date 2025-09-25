@@ -15,14 +15,15 @@ export async function getProductos() {
   const { data } = await api.get("/api/Productos");
   return data;
 }
-export async function getProductosPaged(page, pageSize) {
+export async function getProductosPaged(page, pageSize, query = "") {
   const { data } = await api.get("/api/Productos/paged", {
     params: { 
-      page: page + 1,// tengo que segurar que no aplique esto en back 
+      page: page,   
       pageSize,
+      q: query || undefined, // solo enviar si hay filtro
     },
   });
-  return data; // debería traer { items: [...], total: N }
+  return data; // { data: [...], totalCount: N }
 }
 export async function createProducto(payload) {
   const { data } = await api.post("/api/Productos", payload);
@@ -72,9 +73,13 @@ export async function disableCliente(id) {
   const { data } = await api.patch(`/api/Clientes/${id}/disable`);
   return data;
 }
-export async function getClientesPaged(page, pageSize) {
+export async function getClientesPaged(page, pageSize, query = "") {
   const { data } = await api.get("/api/Clientes/paged", {
-    params: { page: page + 1, pageSize }, // ⚠️ si backend ya arranca en 1
+    params: {
+      page: page  ,   
+      pageSize,
+      q: query
+    },
   });
   return data; // { items: [...], totalCount: N }
 }
@@ -106,4 +111,24 @@ export async function getPedidoById(id) {
 export async function deletePedido(id) {
   const { data } = await api.delete(`/api/Pedidos/${id}`);
   return data;
+}
+export async function calcularDescuento(payload) {
+  const { data } = await api.post("/api/Pedidos/calcular-descuento", payload);
+  return data; // { subtotal, descuento, total }
+}
+
+// ===== FACTURAS =====
+export async function getFacturas() {
+  const { data } = await api.get("/api/Facturas");
+  return data; // [ { facturaId, pedidoId, numeroFactura, subtotal, descuento, impuesto, total, estado, urlPdf } ]
+}
+
+export async function getFacturaByPedido(pedidoId) {
+  const { data } = await api.get(`/api/Facturas/pedido/${pedidoId}`);
+  return data; // { facturaId, pedidoId, numeroFactura, subtotal, ... , urlPdf }
+}
+
+export async function emitirFactura(pedidoId) {
+  const { data } = await api.post(`/api/Facturas/emitir/${pedidoId}`);
+  return data; // { facturaId, pedidoId, numeroFactura, subtotal, ... , urlPdf }
 }

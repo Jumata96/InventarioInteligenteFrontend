@@ -25,18 +25,33 @@ export default function Products() {
   const [openConfirm, setOpenConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
-  // Paginación
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
+  // Paginación (modelo controlado)
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [rowCount, setRowCount] = useState(0);
 
-  // 🔹 Cargar productos
+  // Búsqueda con debounce interno
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPaginationModel((prev) => ({ ...prev, page: 0 })); // resetear página al buscar
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  //  Cargar productos
   const fetchData = async () => {
     setLoading(true);
     try {
-      const data = await getProductosPaged(page, pageSize);
+      const data = await getProductosPaged(
+        paginationModel.page,
+        paginationModel.pageSize,
+        debouncedSearch
+      );
       setRows(Array.isArray(data.items) ? data.items : []);
-      setRowCount(data.total ?? 0);
+      setRowCount(data.totalCount ?? 0);
     } catch (e) {
       console.error("Error cargando productos:", e);
       alert("Error al cargar productos");
@@ -45,7 +60,9 @@ export default function Products() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [page, pageSize]);
+  useEffect(() => {
+    fetchData();
+  }, [paginationModel.page, paginationModel.pageSize, debouncedSearch]);
 
   // Nuevo producto
   const handleNew = () => {
@@ -132,7 +149,6 @@ export default function Products() {
       valueFormatter: (p) => {
         const raw = Number(p ?? 0);
         if (isNaN(raw)) return "S/ 0.00";
-
         return raw.toLocaleString("es-PE", {
           style: "currency",
           currency: "PEN",
@@ -159,7 +175,6 @@ export default function Products() {
       width: 220,
       renderCell: (params) => {
         if (params.row.estado === ESTADOS.ELIMINADO) return null;
-
         return (
           <Stack direction="row" spacing={1}>
             <IconButton color="primary" onClick={() => handleEdit(params.row)} title="Editar">
@@ -188,12 +203,24 @@ export default function Products() {
       <Typography variant="h5" gutterBottom>Catálogo de Productos</Typography>
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="flex-end" mb={2}>
+          <Box display="flex" justifyContent="space-between" mb={2}>
+            <TextField
+              label="Buscar producto"
+              variant="outlined"
+              size="small"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ width: 300 }}
+            />
             <Button
               variant="contained"
               startIcon={<Add />}
               onClick={handleNew}
-              sx={{ background: "linear-gradient(45deg, #2196F3, #21CBF3)", color: "white", borderRadius: 2 }}
+              sx={{
+                background: "linear-gradient(45deg, #2196F3, #21CBF3)",
+                color: "white",
+                borderRadius: 2
+              }}
             >
               Nuevo Producto
             </Button>
@@ -206,11 +233,8 @@ export default function Products() {
             getRowId={(r) => r.productoId}
             paginationMode="server"
             rowCount={rowCount}
-            paginationModel={{ page, pageSize }}
-            onPaginationModelChange={(model) => {
-              setPage(model.page);
-              setPageSize(model.pageSize);
-            }}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20]}
             disableRowSelectionOnClick
           />

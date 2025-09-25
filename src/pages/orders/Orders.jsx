@@ -1,3 +1,4 @@
+// src/pages/orders/Orders.jsx
 import {
   Box, Card, CardContent, Typography, Button, TextField,
   Autocomplete, MenuItem, Select, InputLabel, FormControl,
@@ -6,38 +7,78 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import {
-  getClientes, getPaises, getProductos, getImpuestosPorPais, createPedido
+  getClientesPaged, getPaises, getProductosPaged, getImpuestosPorPais,
+  createPedido, calcularDescuento
 } from "../../api/endpoints";
 
 export default function Orders() {
-  const [clientes, setClientes] = useState([]);
+  const [clientesOpts, setClientesOpts] = useState([]);
+  const [productosOpts, setProductosOpts] = useState([]);
   const [paises, setPaises] = useState([]);
-  const [productos, setProductos] = useState([]);
   const [impuestos, setImpuestos] = useState([]);
 
   const [clienteSel, setClienteSel] = useState(null);
   const [paisSel, setPaisSel] = useState(null);
   const [items, setItems] = useState([]);
 
+  // búsqueda con debounce
+  const [searchCliente, setSearchCliente] = useState("");
+  const [searchProducto, setSearchProducto] = useState("");
+
   // Modal producto + cantidad
   const [openModal, setOpenModal] = useState(false);
   const [prodSel, setProdSel] = useState(null);
   const [cantSel, setCantSel] = useState(1);
 
+  // Totales calculados desde backend
+  const [totales, setTotales] = useState({ subtotal: 0, descuento: 0, total: 0 });
+
+  const formatPrice = (value) => {
+    const raw = Number(value ?? 0);
+    if (isNaN(raw)) return "S/ 0.00";
+    return raw.toLocaleString("es-PE", {
+      style: "currency",
+      currency: "PEN",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  // cargar paises
   useEffect(() => {
     (async () => {
       try {
-        const [c, p, pr] = await Promise.all([
-          getClientes(), getPaises(), getProductos()
-        ]);
-        setClientes(Array.isArray(c) ? c : []);
+        const p = await getPaises();
         setPaises(Array.isArray(p) ? p : []);
-        setProductos(Array.isArray(pr) ? pr : []);
       } catch {
-        alert("No se pudo cargar datos iniciales");
+        alert("No se pudo cargar países");
       }
     })();
   }, []);
+
+  // cargar clientes dinámicos
+  useEffect(() => {
+    (async () => {
+      try {
+        const clientesData = await getClientesPaged(0, 10, searchCliente);
+        setClientesOpts(clientesData.items ?? []);
+      } catch {
+        setClientesOpts([]);
+      }
+    })();
+  }, [searchCliente]);
+
+  // cargar productos dinámicos
+  useEffect(() => {
+    (async () => {
+      try {
+        const productosData = await getProductosPaged(0, 10, searchProducto);
+        setProductosOpts(productosData.items ?? []);
+      } catch {
+        setProductosOpts([]);
+      }
+    })();
+  }, [searchProducto]);
 
   useEffect(() => {
     (async () => {
@@ -51,22 +92,64 @@ export default function Orders() {
     })();
   }, [paisSel]);
 
+  // Calcular descuento dinámicamente con backend
+  useEffect(() => {
+    const calcular = async () => {
+      if (!items.length) {
+        setTotales({ subtotal: 0, descuento: 0, total: 0 });
+        return;
+      }
+      try {
+        const payload = {
+          clienteId: clienteSel?.clienteId || 0,
+          paisId: paisSel?.paisId || 0,
+          detalles: items.map(i => ({ productoId: i.productoId, cantidad: i.cantidad }))
+        };
+        const result = await calcularDescuento(payload);
+        setTotales(result); // { subtotal, descuento, total }
+      } catch (err) {
+        console.error("Error calculando descuento", err);
+        setTotales({ subtotal: 0, descuento: 0, total: 0 });
+      }
+    };
+    calcular();
+  }, [items, clienteSel, paisSel]);
+
   const confirmarAgregar = () => {
     if (!prodSel || cantSel < 1) return;
-    if (cantSel > Number(prodSel.stock)) return alert("Cantidad supera el stock");
-    if (items.find(i => i.productoId === prodSel.productoId)) {
-      return alert("El producto ya fue agregado");
-    }
-    setItems(prev => [
-      ...prev,
-      {
-        productoId: prodSel.productoId,
-        nombre: prodSel.nombre,
-        precio: Number(prodSel.precio),
-        cantidad: Number(cantSel),
-        subtotal: Number(prodSel.precio) * Number(cantSel),
+    setItems(prev => {
+      const existe = prev.find(i => i.productoId === prodSel.productoId);
+      if (existe) {
+        if (existe.cantidad + cantSel > Number(prodSel.stock)) {
+          alert("Cantidad supera el stock disponible");
+          return prev;
+        }
+        return prev.map(i =>
+          i.productoId === prodSel.productoId
+            ? {
+                ...i,
+                cantidad: i.cantidad + Number(cantSel),
+                subtotal: i.precio * (i.cantidad + Number(cantSel))
+              }
+            : i
+        );
+      } else {
+        if (cantSel > Number(prodSel.stock)) {
+          alert("Cantidad supera el stock disponible");
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            productoId: prodSel.productoId,
+            nombre: prodSel.nombre,
+            precio: Number(prodSel.precio),
+            cantidad: Number(cantSel),
+            subtotal: Number(prodSel.precio) * Number(cantSel),
+          },
+        ];
       }
-    ]);
+    });
     setOpenModal(false);
     setProdSel(null);
     setCantSel(1);
@@ -82,10 +165,10 @@ export default function Orders() {
 
   const removeItem = (id) => setItems(prev => prev.filter(i => i.productoId !== id));
 
-  const subTotal = useMemo(() => items.reduce((acc, i) => acc + i.subtotal, 0), [items]);
+  // Impuestos (se aplican sobre total del backend)
   const taxPercent = Number(impuestos?.[0]?.porcentaje || 0);
-  const tax = (subTotal * taxPercent) / 100;
-  const total = subTotal + tax;
+  const tax = ((totales.total) * taxPercent) / 100;
+  const totalFinal = totales.total + tax;
 
   const savePedido = async () => {
     if (!clienteSel) return alert("Selecciona un cliente");
@@ -101,29 +184,51 @@ export default function Orders() {
       await createPedido(payload);
       alert("Pedido creado");
       setItems([]);
+      setTotales({ subtotal: 0, descuento: 0, total: 0 });
     } catch (e) {
       alert(e?.response?.data?.message || "No se pudo crear el pedido");
     }
   };
 
   const columns = [
-    { field: "nombre", headerName: "Producto", flex: 1 },
-    { field: "precio", headerName: "Precio (S/)", width: 140, valueFormatter: (p)=>`S/ ${Number(p.value).toFixed(2)}` },
+    { field: "nombre", headerName: "Producto", flex: 1, minWidth: 160 },
     {
-      field: "cantidad", headerName: "Cantidad", width: 150,
+      field: "precio",
+      headerName: "Precio (S/)",
+      width: 140,
+      valueFormatter: (p) => formatPrice(p),
+    },
+    {
+      field: "cantidad",
+      headerName: "Cantidad",
+      width: 150,
       renderCell: (params) => (
         <TextField
-          type="number" size="small" value={params.row.cantidad}
-          onChange={(e)=>updateCantidad(params.row.productoId, e.target.value)}
+          type="number"
+          size="small"
+          value={params.row.cantidad}
+          onChange={(e) => updateCantidad(params.row.productoId, e.target.value)}
           inputProps={{ min: 1 }}
         />
       ),
     },
-    { field: "subtotal", headerName: "Subtotal", width: 140, valueFormatter: (p)=>`S/ ${Number(p.value).toFixed(2)}` },
     {
-      field: "acciones", headerName: "Acciones", width: 130,
+      field: "subtotal",
+      headerName: "Subtotal",
+      width: 140,
+      valueFormatter: (p) => formatPrice(p),
+    },
+    {
+      field: "acciones",
+      headerName: "Acciones",
+      width: 130,
       renderCell: (params) => (
-        <Button variant="outlined" color="error" size="small" onClick={()=>removeItem(params.row.productoId)}>
+        <Button
+          variant="outlined"
+          color="error"
+          size="small"
+          onClick={() => removeItem(params.row.productoId)}
+        >
           Quitar
         </Button>
       ),
@@ -138,7 +243,7 @@ export default function Orders() {
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Autocomplete
-            options={clientes}
+            options={clientesOpts}
             getOptionLabel={(c) => `${c.ruc} - ${c.nombre}`}
             onChange={(_, value) => {
               setClienteSel(value);
@@ -149,13 +254,25 @@ export default function Orders() {
                 setPaisSel(null);
               }
             }}
+            onInputChange={(_, value) => setSearchCliente(value)}
             renderInput={(params) => <TextField {...params} label="Cliente (RUC o nombre)" />}
             sx={{ minWidth: 320, flex: 1 }}
           />
           <FormControl sx={{ minWidth: 220 }}>
             <InputLabel>País</InputLabel>
-            <Select label="País" value={paisSel?.paisId || ""} disabled>
-              {paises.map(p => <MenuItem key={p.paisId} value={p.paisId}>{p.nombre}</MenuItem>)}
+            <Select
+              label="País"
+              value={paisSel?.paisId || ""}
+              onChange={(e) => {
+                const pais = paises.find(p => p.paisId === e.target.value);
+                setPaisSel(pais || null);
+              }}
+            >
+              {paises.map(p => (
+                <MenuItem key={p.paisId} value={p.paisId}>
+                  {p.nombre}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
           <Box sx={{ flex: 1 }} />
@@ -172,9 +289,9 @@ export default function Orders() {
             autoHeight
             rows={items}
             columns={columns}
-            getRowId={(r)=>r.productoId}
-            pageSizeOptions={[5, 10]}
+            getRowId={(r) => r.productoId}
             disableRowSelectionOnClick
+            pageSizeOptions={[5, 10, 20]}
           />
         </CardContent>
       </Card>
@@ -182,33 +299,43 @@ export default function Orders() {
       {/* Totales */}
       <Card>
         <CardContent sx={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <Typography>Subtotal: <b>S/ {subTotal.toFixed(2)}</b></Typography>
-          <Typography>Impuesto ({taxPercent}%): <b>S/ {tax.toFixed(2)}</b></Typography>
-          <Typography variant="h6">Total: S/ {total.toFixed(2)}</Typography>
-          <Button variant="contained" color="primary" onClick={savePedido}>Guardar Pedido</Button>
+          <Typography>Subtotal: <b>{formatPrice(totales.subtotal)}</b></Typography>
+          <Typography>Descuento: <b>-{formatPrice(totales.descuento)}</b></Typography>
+          <Typography>Impuesto ({taxPercent}%): <b>{formatPrice(tax)}</b></Typography>
+          <Typography variant="h6">Total a Pagar: {formatPrice(totalFinal)}</Typography>
+          <Button variant="contained" color="primary" onClick={savePedido}>
+            Guardar Pedido
+          </Button>
         </CardContent>
       </Card>
 
       {/* Modal Producto + Cantidad */}
-      <Dialog open={openModal} onClose={()=>setOpenModal(false)} maxWidth="sm" fullWidth>
+      <Dialog open={openModal} onClose={() => setOpenModal(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Agregar producto al pedido</DialogTitle>
-        <DialogContent sx={{ display:"flex", flexDirection:"column", gap:2, mt:1 }}>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
           <Autocomplete
-            options={productos}
+            options={productosOpts}
             value={prodSel}
-            onChange={(_, v)=>setProdSel(v)}
-            getOptionLabel={(p)=> `${p?.nombre ?? ""} - S/ ${Number(p?.precio ?? 0).toFixed(2)} (Stock: ${p?.stock ?? 0})`}
-            renderInput={(params)=> <TextField {...params} label="Producto" />}
+            onChange={(_, v) => setProdSel(v)}
+            onInputChange={(_, value) => setSearchProducto(value)}
+            getOptionLabel={(p) =>
+              `${p?.nombre ?? ""} - ${formatPrice(p?.precio)} (Stock: ${p?.stock ?? 0})`
+            }
+            renderInput={(params) => <TextField {...params} label="Producto" />}
           />
           <TextField
-            label="Cantidad" type="number" value={cantSel}
-            onChange={(e)=>setCantSel(Number(e.target.value))}
+            label="Cantidad"
+            type="number"
+            value={cantSel}
+            onChange={(e) => setCantSel(Number(e.target.value))}
             inputProps={{ min: 1 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={()=>setOpenModal(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={confirmarAgregar}>Agregar</Button>
+          <Button onClick={() => setOpenModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={confirmarAgregar}>
+            Agregar
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

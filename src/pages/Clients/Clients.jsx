@@ -50,22 +50,35 @@ export default function Clients() {
   const [openConfirm, setOpenConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
-  // Paginación
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
+  // Paginación (controlada)
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [rowCount, setRowCount] = useState(0);
 
-  // 🔹 Cargar datos
+  // 🔎 Búsqueda con debounce
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPaginationModel((prev) => ({ ...prev, page: 0 })); // reset a página 0
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  //  Cargar datos
   const fetchData = async () => {
     setLoading(true);
     try {
-      const dataClientes = await getClientesPaged(page, pageSize);
+      const dataClientes = await getClientesPaged(
+        paginationModel.page,
+        paginationModel.pageSize,
+        debouncedSearch
+      );
       const dataPaises = await getPaises();
 
-      // Ajuste: API devuelve "data" y "totalCount"
-      setRows(Array.isArray(dataClientes.data) ? dataClientes.data : []);
+      setRows(Array.isArray(dataClientes.items) ? dataClientes.items : []);
       setRowCount(dataClientes.totalCount ?? 0);
-
       setPaises(dataPaises);
     } catch (err) {
       console.error("Error cargando clientes/paises", err);
@@ -76,23 +89,16 @@ export default function Clients() {
 
   useEffect(() => {
     fetchData();
-  }, [page, pageSize]);
+  }, [paginationModel.page, paginationModel.pageSize, debouncedSearch]);
 
-  // 🔹 Mapear paisId -> nombre
-  const getPaisNombre = (id) => {
-    if (!id) return "No definido";
-    const pais = paises.find((p) => p.paisId === id);
-    return pais ? pais.nombre : "No definido";
-  };
-
-  // 🔹 Nuevo cliente
+  //  Nuevo cliente
   const handleNew = () => {
     setEditing(null);
     setForm({ ruc: "", nombre: "", email: "", telefono: "", direccion: "", paisId: "" });
     setOpen(true);
   };
 
-  // 🔹 Editar cliente
+  //  Editar cliente
   const handleEdit = (row) => {
     setEditing(row);
     setForm({
@@ -106,12 +112,11 @@ export default function Clients() {
     setOpen(true);
   };
 
-  // 🔹 Guardar cliente
+  //  Guardar cliente
   const handleSave = async () => {
     if (!form.ruc || !form.nombre || !form.paisId) {
       return alert("Completa todos los campos obligatorios");
     }
-
     try {
       if (editing) {
         await updateCliente(editing.clienteId, form);
@@ -126,7 +131,7 @@ export default function Clients() {
     }
   };
 
-  // 🔹 Confirmación de eliminar
+  //  Confirmación de eliminar
   const handleDeleteRequest = (id) => {
     setDeleteId(id);
     setOpenConfirm(true);
@@ -144,7 +149,7 @@ export default function Clients() {
     }
   };
 
-  // 🔹 Habilitar / Deshabilitar
+  //  Habilitar / Deshabilitar
   const handleToggleEstado = async (row) => {
     try {
       if (row.estado === ESTADOS.ACTIVO) {
@@ -160,20 +165,16 @@ export default function Clients() {
   };
 
   const columns = [
-    { field: "ruc", headerName: "RUC", flex: 1 },
-    { field: "nombre", headerName: "Nombre", flex: 1 },
-    { field: "email", headerName: "Email", flex: 1 },
-    { field: "telefono", headerName: "Teléfono", flex: 1 },
-    { field: "direccion", headerName: "Dirección", flex: 1 }, 
-    {
-      field: "paisNombre",
-      headerName: "País",
-      flex: 1
-    },
+    { field: "ruc", headerName: "RUC", flex: 1, minWidth: 100 },
+    { field: "nombre", headerName: "Nombre", flex: 1, minWidth: 140 },
+    { field: "email", headerName: "Email", flex: 1, minWidth: 140 },
+    { field: "telefono", headerName: "Teléfono", flex: 1, minWidth: 110 },
+    { field: "direccion", headerName: "Dirección", flex: 1, minWidth: 140 },
+    { field: "paisNombre", headerName: "País", flex: 1, minWidth: 120 },
     {
       field: "estado",
       headerName: "Estado",
-      width: 160,
+      minWidth: 140,
       renderCell: (params) => (
         <Stack direction="row" spacing={1} alignItems="center">
           {getEstadoIcon(params.value)}
@@ -184,10 +185,9 @@ export default function Clients() {
     {
       field: "acciones",
       headerName: "Acciones",
-      width: 220,
+      minWidth: 180,
       renderCell: (params) => {
         if (params.row.estado === ESTADOS.ELIMINADO) return null;
-
         return (
           <Stack direction="row" spacing={1}>
             <IconButton color="primary" onClick={() => handleEdit(params.row)} title="Editar">
@@ -219,6 +219,14 @@ export default function Clients() {
             <Typography variant="h5" fontWeight="bold">
               Clientes
             </Typography>
+            <TextField
+              label="Buscar cliente"
+              variant="outlined"
+              size="small"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ width: 300 }}
+            />
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -236,11 +244,8 @@ export default function Clients() {
             getRowId={(row) => row.clienteId}
             paginationMode="server"
             rowCount={rowCount}
-            paginationModel={{ page, pageSize }}
-            onPaginationModelChange={(model) => {
-              setPage(model.page);
-              setPageSize(model.pageSize);
-            }}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20]}
             disableRowSelectionOnClick
           />
@@ -252,23 +257,17 @@ export default function Clients() {
         <DialogTitle>{editing ? "Editar Cliente" : "Nuevo Cliente"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
-            <TextField label="RUC" fullWidth value={form.ruc} onChange={(e)=>setForm({...form, ruc: e.target.value})}/>
-            <TextField label="Nombre" fullWidth value={form.nombre} onChange={(e)=>setForm({...form, nombre: e.target.value})}/>
-            <TextField label="Email" fullWidth value={form.email} onChange={(e)=>setForm({...form, email: e.target.value})}/>
-            <TextField label="Teléfono" fullWidth value={form.telefono} onChange={(e)=>setForm({...form, telefono: e.target.value})}/>
-            <TextField label="Dirección" fullWidth value={form.direccion} onChange={(e)=>setForm({...form, direccion: e.target.value})}/>
-
-            {/* Autocomplete para país */}
+            <TextField label="RUC" fullWidth value={form.ruc} onChange={(e) => setForm({ ...form, ruc: e.target.value })} />
+            <TextField label="Nombre" fullWidth value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+            <TextField label="Email" fullWidth value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <TextField label="Teléfono" fullWidth value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+            <TextField label="Dirección" fullWidth value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
             <Autocomplete
               options={paises}
               getOptionLabel={(option) => `${option.codigo} - ${option.nombre}`}
               value={paises.find((p) => p.paisId === form.paisId) || null}
-              onChange={(e, newValue) =>
-                setForm({ ...form, paisId: newValue ? newValue.paisId : "" })
-              }
-              renderInput={(params) => (
-                <TextField {...params} label="País" fullWidth />
-              )}
+              onChange={(e, newValue) => setForm({ ...form, paisId: newValue ? newValue.paisId : "" })}
+              renderInput={(params) => <TextField {...params} label="País" fullWidth />}
             />
           </Stack>
         </DialogContent>

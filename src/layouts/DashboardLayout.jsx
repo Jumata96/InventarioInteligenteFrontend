@@ -7,6 +7,7 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import PeopleIcon from "@mui/icons-material/People";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import LogoutIcon from "@mui/icons-material/Logout";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import { Outlet, useNavigate, Navigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -24,6 +25,7 @@ export default function DashboardLayout() {
     { text: "Productos", icon: <InventoryIcon />, path: "/products" },
     { text: "Clientes", icon: <PeopleIcon />, path: "/clients" },
     { text: "Pedidos", icon: <ShoppingCartIcon />, path: "/orders" },
+    { text: "Facturar pedidos", icon: <ReceiptLongIcon />, path: "/orders/list" },
     { text: "Salir", icon: <LogoutIcon />, action: () => { logout(); nav("/login"); } },
   ];
 
