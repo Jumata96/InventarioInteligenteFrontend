@@ -1,261 +1,214 @@
-// src/pages/orders/Orders.jsx
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  MenuItem,
-  IconButton,
+  Box, Card, CardContent, Typography, Button, TextField,
+  Autocomplete, MenuItem, Select, InputLabel, FormControl,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import DeleteIcon from "@mui/icons-material/Delete";
-import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
-import PeopleIcon from "@mui/icons-material/People";
-import PublicIcon from "@mui/icons-material/Public";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getClientes, getPaises, getProductos, getImpuestosPorPais, createPedido
+} from "../../api/endpoints";
 
 export default function Orders() {
-  const [rows, setRows] = useState([
-    { id: 1, producto: "Laptop", cantidad: 1, precio: 2500 },
-    { id: 2, producto: "Mouse", cantidad: 2, precio: 50 },
-  ]);
+  const [clientes, setClientes] = useState([]);
+  const [paises, setPaises] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [impuestos, setImpuestos] = useState([]);
 
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ producto: "", cantidad: 1, precio: 0 });
+  const [clienteSel, setClienteSel] = useState(null);
+  const [paisSel, setPaisSel] = useState(null);
+  const [items, setItems] = useState([]);
 
-  const [cliente, setCliente] = useState("");
-  const [pais, setPais] = useState("");
+  // Modal producto + cantidad
+  const [openModal, setOpenModal] = useState(false);
+  const [prodSel, setProdSel] = useState(null);
+  const [cantSel, setCantSel] = useState(1);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [c, p, pr] = await Promise.all([
+          getClientes(), getPaises(), getProductos()
+        ]);
+        setClientes(Array.isArray(c) ? c : []);
+        setPaises(Array.isArray(p) ? p : []);
+        setProductos(Array.isArray(pr) ? pr : []);
+      } catch {
+        alert("No se pudo cargar datos iniciales");
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!paisSel) { setImpuestos([]); return; }
+      try {
+        const data = await getImpuestosPorPais(paisSel.paisId);
+        setImpuestos(Array.isArray(data) ? data : []);
+      } catch {
+        setImpuestos([]);
+      }
+    })();
+  }, [paisSel]);
+
+  const confirmarAgregar = () => {
+    if (!prodSel || cantSel < 1) return;
+    if (cantSel > Number(prodSel.stock)) return alert("Cantidad supera el stock");
+    if (items.find(i => i.productoId === prodSel.productoId)) {
+      return alert("El producto ya fue agregado");
+    }
+    setItems(prev => [
+      ...prev,
+      {
+        productoId: prodSel.productoId,
+        nombre: prodSel.nombre,
+        precio: Number(prodSel.precio),
+        cantidad: Number(cantSel),
+        subtotal: Number(prodSel.precio) * Number(cantSel),
+      }
+    ]);
+    setOpenModal(false);
+    setProdSel(null);
+    setCantSel(1);
+  };
+
+  const updateCantidad = (id, cantidad) => {
+    const c = Number(cantidad);
+    if (isNaN(c) || c < 1) return;
+    setItems(prev => prev.map(i => i.productoId === id ? ({
+      ...i, cantidad: c, subtotal: i.precio * c
+    }) : i));
+  };
+
+  const removeItem = (id) => setItems(prev => prev.filter(i => i.productoId !== id));
+
+  const subTotal = useMemo(() => items.reduce((acc, i) => acc + i.subtotal, 0), [items]);
+  const taxPercent = Number(impuestos?.[0]?.porcentaje || 0);
+  const tax = (subTotal * taxPercent) / 100;
+  const total = subTotal + tax;
+
+  const savePedido = async () => {
+    if (!clienteSel) return alert("Selecciona un cliente");
+    if (!paisSel) return alert("Selecciona un país");
+    if (!items.length) return alert("Agrega productos");
+
+    const payload = {
+      clienteId: clienteSel.clienteId,
+      paisId: paisSel.paisId,
+      detalles: items.map(i => ({ productoId: i.productoId, cantidad: i.cantidad })),
+    };
+    try {
+      await createPedido(payload);
+      alert("Pedido creado");
+      setItems([]);
+    } catch (e) {
+      alert(e?.response?.data?.message || "No se pudo crear el pedido");
+    }
+  };
 
   const columns = [
-    { field: "producto", headerName: "Producto", flex: 1 },
-    { field: "cantidad", headerName: "Cantidad", flex: 1 },
+    { field: "nombre", headerName: "Producto", flex: 1 },
+    { field: "precio", headerName: "Precio (S/)", width: 140, valueFormatter: (p)=>`S/ ${Number(p.value).toFixed(2)}` },
     {
-      field: "precio",
-      headerName: "Precio (S/)",
-      flex: 1,
-      renderCell: (params) => `S/ ${params.row.precio.toFixed(2)}`,
-    },
-    {
-      field: "subtotal",
-      headerName: "Subtotal",
-      flex: 1,
-      renderCell: (params) =>
-        `S/ ${(params.row.cantidad * params.row.precio).toFixed(2)}`,
-    },
-    {
-      field: "acciones",
-      headerName: "Acciones",
-      flex: 1,
+      field: "cantidad", headerName: "Cantidad", width: 150,
       renderCell: (params) => (
-        <IconButton
-          color="error"
-          size="small"
-          onClick={() => handleDelete(params.row.id)}
-        >
-          <DeleteIcon />
-        </IconButton>
+        <TextField
+          type="number" size="small" value={params.row.cantidad}
+          onChange={(e)=>updateCantidad(params.row.productoId, e.target.value)}
+          inputProps={{ min: 1 }}
+        />
+      ),
+    },
+    { field: "subtotal", headerName: "Subtotal", width: 140, valueFormatter: (p)=>`S/ ${Number(p.value).toFixed(2)}` },
+    {
+      field: "acciones", headerName: "Acciones", width: 130,
+      renderCell: (params) => (
+        <Button variant="outlined" color="error" size="small" onClick={()=>removeItem(params.row.productoId)}>
+          Quitar
+        </Button>
       ),
     },
   ];
 
-  const handleDelete = (id) => {
-    setRows((prev) => prev.filter((row) => row.id !== id));
-  };
-
-  const handleAdd = () => {
-    if (!form.producto || form.precio <= 0 || form.cantidad <= 0) {
-      alert("Completa correctamente los campos");
-      return;
-    }
-    const newId = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : 1;
-    setRows((prev) => [...prev, { id: newId, ...form }]);
-    setOpen(false);
-    setForm({ producto: "", cantidad: 1, precio: 0 });
-  };
-
-  // Calcular totales
-  const subTotal = rows.reduce((acc, r) => acc + r.cantidad * r.precio, 0);
-  const impuesto = subTotal * 0.18;
-  const total = subTotal + impuesto;
-
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #c2e9fb 0%, #a1c4fd 100%)",
-        p: 3,
-      }}
-    >
-      <Card sx={{ borderRadius: 4, boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
-        <CardContent>
-          {/* Header */}
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 1,
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom>Nuevo Pedido</Typography>
+
+      {/* Datos del pedido */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Autocomplete
+            options={clientes}
+            getOptionLabel={(c) => `${c.ruc} - ${c.nombre}`}
+            onChange={(_, value) => {
+              setClienteSel(value);
+              if (value) {
+                const pais = paises.find(p => p.paisId === value.paisId);
+                setPaisSel(pais || null);
+              } else {
+                setPaisSel(null);
+              }
             }}
-          >
-            <Box>
-              <Typography variant="h5" fontWeight={700}>
-                Nuevo Pedido
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Registra pedidos y genera facturas fácilmente
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              startIcon={<AddCircleOutlineIcon />}
-              onClick={() => setOpen(true)}
-              sx={{
-                borderRadius: 20,
-                px: 3,
-                background:
-                  "linear-gradient(90deg, #36d1dc 0%, #5b86e5 100%)",
-                "&:hover": {
-                  background:
-                    "linear-gradient(90deg, #2bb1bb 0%, #4a6fd3 100%)",
-                },
-              }}
-            >
-              Agregar producto
-            </Button>
-          </Box>
-
-          <Divider sx={{ mb: 2 }} />
-
-          {/* Cliente y País */}
-          <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
-            <TextField
-              label="Cliente"
-              select
-              value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
-              sx={{ minWidth: 200 }}
-              InputProps={{ startAdornment: <PeopleIcon sx={{ mr: 1 }} /> }}
-            >
-              <MenuItem value="Cliente A">Cliente A</MenuItem>
-              <MenuItem value="Cliente B">Cliente B</MenuItem>
-            </TextField>
-
-            <TextField
-              label="País"
-              select
-              value={pais}
-              onChange={(e) => setPais(e.target.value)}
-              sx={{ minWidth: 200 }}
-              InputProps={{ startAdornment: <PublicIcon sx={{ mr: 1 }} /> }}
-            >
-              <MenuItem value="Perú">Perú</MenuItem>
-              <MenuItem value="Ecuador">Ecuador</MenuItem>
-            </TextField>
-          </Box>
-
-          {/* Tabla */}
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            autoHeight
-            disableSelectionOnClick
-            pageSize={5}
-            sx={{
-              backgroundColor: "white",
-              borderRadius: 2,
-              boxShadow: 1,
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "#f5f5f5",
-                fontWeight: "600",
-              },
-              "& .MuiDataGrid-row:nth-of-type(odd)": {
-                backgroundColor: "#fafafa",
-              },
-            }}
+            renderInput={(params) => <TextField {...params} label="Cliente (RUC o nombre)" />}
+            sx={{ minWidth: 320, flex: 1 }}
           />
-
-          {/* Totales */}
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              mt: 2,
-              gap: 1,
-            }}
-          >
-            <Typography>Subtotal: S/ {subTotal.toFixed(2)}</Typography>
-            <Typography>Impuestos (18%): S/ {impuesto.toFixed(2)}</Typography>
-            <Typography fontWeight={700}>Total: S/ {total.toFixed(2)}</Typography>
-          </Box>
-
-          {/* Guardar */}
-          <Box sx={{ mt: 3, textAlign: "right" }}>
-            <Button
-              variant="contained"
-              startIcon={<ShoppingCartIcon />}
-              sx={{
-                borderRadius: 20,
-                px: 3,
-                background:
-                  "linear-gradient(90deg, #11998e 0%, #38ef7d 100%)",
-                "&:hover": {
-                  background:
-                    "linear-gradient(90deg, #0f887c 0%, #32d36f 100%)",
-                },
-              }}
-            >
-              Guardar y generar factura (PDF)
-            </Button>
-          </Box>
+          <FormControl sx={{ minWidth: 220 }}>
+            <InputLabel>País</InputLabel>
+            <Select label="País" value={paisSel?.paisId || ""} disabled>
+              {paises.map(p => <MenuItem key={p.paisId} value={p.paisId}>{p.nombre}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Box sx={{ flex: 1 }} />
+          <Button variant="contained" onClick={() => setOpenModal(true)}>
+            Agregar Producto
+          </Button>
         </CardContent>
       </Card>
 
-      {/* Modal */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      {/* Detalle */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <DataGrid
+            autoHeight
+            rows={items}
+            columns={columns}
+            getRowId={(r)=>r.productoId}
+            pageSizeOptions={[5, 10]}
+            disableRowSelectionOnClick
+          />
+        </CardContent>
+      </Card>
+
+      {/* Totales */}
+      <Card>
+        <CardContent sx={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <Typography>Subtotal: <b>S/ {subTotal.toFixed(2)}</b></Typography>
+          <Typography>Impuesto ({taxPercent}%): <b>S/ {tax.toFixed(2)}</b></Typography>
+          <Typography variant="h6">Total: S/ {total.toFixed(2)}</Typography>
+          <Button variant="contained" color="primary" onClick={savePedido}>Guardar Pedido</Button>
+        </CardContent>
+      </Card>
+
+      {/* Modal Producto + Cantidad */}
+      <Dialog open={openModal} onClose={()=>setOpenModal(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Agregar producto al pedido</DialogTitle>
-        <DialogContent
-          sx={{ display: "flex", flexDirection: "column", gap: 2 }}
-        >
-          <TextField
-            label="Producto"
-            value={form.producto}
-            onChange={(e) => setForm({ ...form, producto: e.target.value })}
-            fullWidth
+        <DialogContent sx={{ display:"flex", flexDirection:"column", gap:2, mt:1 }}>
+          <Autocomplete
+            options={productos}
+            value={prodSel}
+            onChange={(_, v)=>setProdSel(v)}
+            getOptionLabel={(p)=> `${p?.nombre ?? ""} - S/ ${Number(p?.precio ?? 0).toFixed(2)} (Stock: ${p?.stock ?? 0})`}
+            renderInput={(params)=> <TextField {...params} label="Producto" />}
           />
           <TextField
-            label="Cantidad"
-            type="number"
-            value={form.cantidad}
-            onChange={(e) =>
-              setForm({ ...form, cantidad: Number(e.target.value) })
-            }
-            fullWidth
-          />
-          <TextField
-            label="Precio (S/)"
-            type="number"
-            value={form.precio}
-            onChange={(e) =>
-              setForm({ ...form, precio: Number(e.target.value) })
-            }
-            fullWidth
+            label="Cantidad" type="number" value={cantSel}
+            onChange={(e)=>setCantSel(Number(e.target.value))}
+            inputProps={{ min: 1 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={handleAdd}>
-            Agregar
-          </Button>
+          <Button onClick={()=>setOpenModal(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={confirmarAgregar}>Agregar</Button>
         </DialogActions>
       </Dialog>
     </Box>

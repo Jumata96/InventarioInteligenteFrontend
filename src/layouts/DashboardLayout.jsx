@@ -1,61 +1,44 @@
-// src/layouts/DashboardLayout.jsx
-import { useState } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
-  AppBar,
-  Box,
-  CssBaseline,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Toolbar,
-  Typography,
+  AppBar, Box, CssBaseline, Divider, Drawer, IconButton, List,
+  ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography
 } from "@mui/material";
-
 import MenuIcon from "@mui/icons-material/Menu";
-import Inventory2Icon from "@mui/icons-material/Inventory2";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import PeopleIcon from "@mui/icons-material/People";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import LogoutIcon from "@mui/icons-material/Logout";
+import { Outlet, useNavigate, Navigate } from "react-router-dom";
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 const drawerWidth = 240;
 
 export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
-  const location = useLocation();
+  const { isAuthenticated, logout } = useAuth();
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   const menuItems = [
-    { text: "Productos", icon: <Inventory2Icon />, path: "/products" },
+    { text: "Productos", icon: <InventoryIcon />, path: "/products" },
+    { text: "Clientes", icon: <PeopleIcon />, path: "/clients" },
     { text: "Pedidos", icon: <ShoppingCartIcon />, path: "/orders" },
-    { text: "Salir", icon: <LogoutIcon />, path: "/login" },
+    { text: "Salir", icon: <LogoutIcon />, action: () => { logout(); nav("/login"); } },
   ];
 
   const drawer = (
     <div>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Inventario
-        </Typography>
-      </Toolbar>
+      <Toolbar><Typography variant="h6">Inventario</Typography></Toolbar>
       <Divider />
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => nav(item.path)}
+              onClick={() => item.action ? item.action() : nav(item.path)}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemText primary={item.text}/>
             </ListItemButton>
           </ListItem>
         ))}
@@ -66,81 +49,37 @@ export default function DashboardLayout() {
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-
-      {/* AppBar superior */}
-      <AppBar
-        position="fixed"
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-        }}
-      >
+      <AppBar position="fixed" sx={{ zIndex: 1201 }}>
         <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: "none" } }}
-          >
+          <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(!mobileOpen)} sx={{ mr: 2, display: { sm: "none" } }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            Sistema de Inventarios
-          </Typography>
+          <Typography variant="h6" noWrap> Sistema de Inventarios </Typography>
         </Toolbar>
       </AppBar>
 
-      {/* Drawer lateral */}
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-        aria-label="menu folders"
-      >
-        {/* Drawer para móviles */}
+      <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: 0 }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
-          onClose={handleDrawerToggle}
+          onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: "block", sm: "none" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
-          }}
+          sx={{ display: { xs: "block", sm: "none" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth } }}
         >
           {drawer}
         </Drawer>
-
-        {/* Drawer fijo para desktop */}
         <Drawer
           variant="permanent"
-          sx={{
-            display: { xs: "none", sm: "block" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
-          }}
           open
+          sx={{ display: { xs: "none", sm: "block" }, "& .MuiDrawer-paper": { boxSizing: "border-box", width: drawerWidth } }}
         >
           {drawer}
         </Drawer>
       </Box>
 
-      {/* Contenido principal */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-        }}
-      >
+      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
-        <Outlet /> {/* aquí se renderizan Products / Orders */}
+        <Outlet />
       </Box>
     </Box>
   );

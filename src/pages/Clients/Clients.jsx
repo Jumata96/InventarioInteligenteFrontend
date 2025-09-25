@@ -1,25 +1,50 @@
-import {
-  Box, Button, Card, CardContent, Dialog, DialogActions,
-  DialogContent, DialogTitle, IconButton, Stack, TextField, Typography
-} from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
-import { Add, Delete, Edit, CheckCircle, Block } from "@mui/icons-material";
+// src/pages/Clients/Clients.jsx
 import { useEffect, useState } from "react";
 import {
-  getProductosPaged, createProducto, updateProducto, deleteProducto,
-  enableProducto, disableProducto
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Stack,
+  Autocomplete,
+} from "@mui/material";
+import { DataGrid } from "@mui/x-data-grid";
+import { Add, Edit, Delete, CheckCircle, Block } from "@mui/icons-material";
+import {
+  getClientesPaged,
+  createCliente,
+  updateCliente,
+  deleteCliente,
+  enableCliente,
+  disableCliente,
+  getPaises,
 } from "../../api/endpoints";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { ESTADOS, getEstadoLabel, getEstadoIcon } from "../../utils/status";
 
-export default function Products() {
+export default function Clients() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [paises, setPaises] = useState([]);
 
-  // Modal de crear/editar
+  // Modal crear/editar
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ nombre: "", descripcion: "", precio: "", stock: "" });
+  const [form, setForm] = useState({
+    ruc: "",
+    nombre: "",
+    email: "",
+    telefono: "",
+    direccion: "",
+    paisId: "",
+  });
 
   // Confirmación de eliminar
   const [openConfirm, setOpenConfirm] = useState(false);
@@ -30,65 +55,78 @@ export default function Products() {
   const [pageSize, setPageSize] = useState(5);
   const [rowCount, setRowCount] = useState(0);
 
-  // 🔹 Cargar productos
+  // 🔹 Cargar datos
   const fetchData = async () => {
     setLoading(true);
     try {
-      const data = await getProductosPaged(page, pageSize);
-      setRows(Array.isArray(data.items) ? data.items : []);
-      setRowCount(data.total ?? 0);
-    } catch (e) {
-      console.error("Error cargando productos:", e);
-      alert("Error al cargar productos");
+      const dataClientes = await getClientesPaged(page, pageSize);
+      const dataPaises = await getPaises();
+
+      // Ajuste: API devuelve "data" y "totalCount"
+      setRows(Array.isArray(dataClientes.data) ? dataClientes.data : []);
+      setRowCount(dataClientes.totalCount ?? 0);
+
+      setPaises(dataPaises);
+    } catch (err) {
+      console.error("Error cargando clientes/paises", err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [page, pageSize]);
+  useEffect(() => {
+    fetchData();
+  }, [page, pageSize]);
 
-  // Nuevo producto
+  // 🔹 Mapear paisId -> nombre
+  const getPaisNombre = (id) => {
+    if (!id) return "No definido";
+    const pais = paises.find((p) => p.paisId === id);
+    return pais ? pais.nombre : "No definido";
+  };
+
+  // 🔹 Nuevo cliente
   const handleNew = () => {
     setEditing(null);
-    setForm({ nombre: "", descripcion: "", precio: "", stock: "" });
+    setForm({ ruc: "", nombre: "", email: "", telefono: "", direccion: "", paisId: "" });
     setOpen(true);
   };
 
-  // Editar producto
+  // 🔹 Editar cliente
   const handleEdit = (row) => {
     setEditing(row);
     setForm({
+      ruc: row.ruc,
       nombre: row.nombre,
-      descripcion: row.descripcion,
-      precio: row.precio,
-      stock: row.stock
+      email: row.email,
+      telefono: row.telefono,
+      direccion: row.direccion || "",
+      paisId: row.paisId,
     });
     setOpen(true);
   };
 
-  // Guardar producto
+  // 🔹 Guardar cliente
   const handleSave = async () => {
-    const precio = Number(form.precio);
-    const stock = Number(form.stock);
-    if (!form.nombre || precio <= 0 || stock < 0) {
-      return alert("Completa los campos válidos");
+    if (!form.ruc || !form.nombre || !form.paisId) {
+      return alert("Completa todos los campos obligatorios");
     }
 
     try {
       if (editing) {
-        await updateProducto(editing.productoId, { ...form, precio, stock });
+        await updateCliente(editing.clienteId, form);
       } else {
-        await createProducto({ ...form, precio, stock });
+        await createCliente(form);
       }
       setOpen(false);
       fetchData();
     } catch (err) {
-      console.error("Error guardando producto:", err);
-      alert("No se pudo guardar el producto");
+      console.error("Error guardando cliente:", err);
+      alert("No se pudo guardar el cliente");
     }
   };
 
-  // Confirmación de eliminar
+  // 🔹 Confirmación de eliminar
   const handleDeleteRequest = (id) => {
     setDeleteId(id);
     setOpenConfirm(true);
@@ -96,52 +134,42 @@ export default function Products() {
 
   const handleDeleteConfirm = async () => {
     try {
-      await deleteProducto(deleteId);
+      await deleteCliente(deleteId);
       fetchData();
     } catch {
-      alert("No se pudo eliminar el producto");
+      alert("No se pudo eliminar el cliente");
     } finally {
       setOpenConfirm(false);
       setDeleteId(null);
     }
   };
 
-  // Toggle estado (habilitar/deshabilitar)
+  // 🔹 Habilitar / Deshabilitar
   const handleToggleEstado = async (row) => {
     try {
       if (row.estado === ESTADOS.ACTIVO) {
-        await disableProducto(row.productoId);
+        await disableCliente(row.clienteId);
       } else if (row.estado === ESTADOS.DESHABILITADO) {
-        await enableProducto(row.productoId);
+        await enableCliente(row.clienteId);
       }
       fetchData();
     } catch (err) {
       console.error("Error cambiando estado:", err);
-      alert("No se pudo cambiar el estado del producto");
+      alert("No se pudo cambiar el estado del cliente");
     }
   };
 
-  // Definir columnas
   const columns = [
+    { field: "ruc", headerName: "RUC", flex: 1 },
     { field: "nombre", headerName: "Nombre", flex: 1 },
-    { field: "descripcion", headerName: "Descripción", flex: 1 },
+    { field: "email", headerName: "Email", flex: 1 },
+    { field: "telefono", headerName: "Teléfono", flex: 1 },
+    { field: "direccion", headerName: "Dirección", flex: 1 }, 
     {
-      field: "precio",
-      headerName: "Precio (S/)",
-      width: 160,
-      valueFormatter: (p) => {
-        const raw = Number(p ?? 0);
-        if (isNaN(raw)) return "S/ 0.00";
-
-        return raw.toLocaleString("es-PE", {
-          style: "currency",
-          currency: "PEN",
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
-      }
+      field: "paisNombre",
+      headerName: "País",
+      flex: 1
     },
-    { field: "stock", headerName: "Stock", width: 110 },
     {
       field: "estado",
       headerName: "Estado",
@@ -151,7 +179,7 @@ export default function Products() {
           {getEstadoIcon(params.value)}
           <span>{getEstadoLabel(params.value)}</span>
         </Stack>
-      )
+      ),
     },
     {
       field: "acciones",
@@ -165,7 +193,7 @@ export default function Products() {
             <IconButton color="primary" onClick={() => handleEdit(params.row)} title="Editar">
               <Edit />
             </IconButton>
-            <IconButton color="error" onClick={() => handleDeleteRequest(params.row.productoId)} title="Eliminar">
+            <IconButton color="error" onClick={() => handleDeleteRequest(params.row.clienteId)} title="Eliminar">
               <Delete />
             </IconButton>
             {params.row.estado === ESTADOS.ACTIVO ? (
@@ -184,18 +212,20 @@ export default function Products() {
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>Catálogo de Productos</Typography>
+    <Box p={3}>
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="flex-end" mb={2}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h5" fontWeight="bold">
+              Clientes
+            </Typography>
             <Button
               variant="contained"
               startIcon={<Add />}
               onClick={handleNew}
               sx={{ background: "linear-gradient(45deg, #2196F3, #21CBF3)", color: "white", borderRadius: 2 }}
             >
-              Nuevo Producto
+              Nuevo Cliente
             </Button>
           </Box>
           <DataGrid
@@ -203,7 +233,7 @@ export default function Products() {
             loading={loading}
             rows={rows}
             columns={columns}
-            getRowId={(r) => r.productoId}
+            getRowId={(row) => row.clienteId}
             paginationMode="server"
             rowCount={rowCount}
             paginationModel={{ page, pageSize }}
@@ -219,13 +249,27 @@ export default function Products() {
 
       {/* Modal Crear/Editar */}
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
+        <DialogTitle>{editing ? "Editar Cliente" : "Nuevo Cliente"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
-            <TextField label="Nombre" fullWidth value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-            <TextField label="Descripción" fullWidth value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
-            <TextField label="Precio" type="number" fullWidth value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} />
-            <TextField label="Stock" type="number" fullWidth value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+            <TextField label="RUC" fullWidth value={form.ruc} onChange={(e)=>setForm({...form, ruc: e.target.value})}/>
+            <TextField label="Nombre" fullWidth value={form.nombre} onChange={(e)=>setForm({...form, nombre: e.target.value})}/>
+            <TextField label="Email" fullWidth value={form.email} onChange={(e)=>setForm({...form, email: e.target.value})}/>
+            <TextField label="Teléfono" fullWidth value={form.telefono} onChange={(e)=>setForm({...form, telefono: e.target.value})}/>
+            <TextField label="Dirección" fullWidth value={form.direccion} onChange={(e)=>setForm({...form, direccion: e.target.value})}/>
+
+            {/* Autocomplete para país */}
+            <Autocomplete
+              options={paises}
+              getOptionLabel={(option) => `${option.codigo} - ${option.nombre}`}
+              value={paises.find((p) => p.paisId === form.paisId) || null}
+              onChange={(e, newValue) =>
+                setForm({ ...form, paisId: newValue ? newValue.paisId : "" })
+              }
+              renderInput={(params) => (
+                <TextField {...params} label="País" fullWidth />
+              )}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -240,7 +284,7 @@ export default function Products() {
       <ConfirmDialog
         open={openConfirm}
         title="Confirmar eliminación"
-        message="¿Seguro que deseas eliminar este producto? Esta acción no se puede deshacer."
+        message="¿Seguro que deseas eliminar este cliente? Esta acción no se puede deshacer."
         onClose={() => setOpenConfirm(false)}
         onConfirm={handleDeleteConfirm}
         confirmText="Eliminar"

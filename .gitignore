@@ -47,7 +47,7 @@ storybook-static/
 # Symbols folder
 .alpackages/
 # Snapshots folder
-.snapshots/
+.snapshots/. 
 # Testing Output folder
 .output/
 # Extension App-file

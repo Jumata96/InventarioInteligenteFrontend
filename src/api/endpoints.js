@@ -1,7 +1,109 @@
-import { api } from "./client";
+import api from "./client";
 
-export async function authLogin(payload) {
+// ===== AUTH =====
+export async function loginApi(payload) {
   const { data } = await api.post("/api/Auth/login", payload);
-  console.log({data_authLogin: data}); 
-  return data; // espera { token: "..." }
+  return data; // { token, ... }
+}
+export async function registerApi(payload) {
+  const { data } = await api.post("/api/Auth/register", payload);
+  return data;
+}
+
+// ===== PRODUCTOS =====
+export async function getProductos() {
+  const { data } = await api.get("/api/Productos");
+  return data;
+}
+export async function getProductosPaged(page, pageSize) {
+  const { data } = await api.get("/api/Productos/paged", {
+    params: { 
+      page: page + 1,// tengo que segurar que no aplique esto en back 
+      pageSize,
+    },
+  });
+  return data; // debería traer { items: [...], total: N }
+}
+export async function createProducto(payload) {
+  const { data } = await api.post("/api/Productos", payload);
+  return data;
+}
+export async function updateProducto(id, payload) {
+  const { data } = await api.put(`/api/Productos/${id}`, payload);
+  return data;
+}
+export async function deleteProducto(id) {
+  const { data } = await api.delete(`/api/Productos/${id}`);
+  return data;
+}
+ export const enableProducto = async (id) => {
+  await api.patch(`/api/Productos/${id}/enable`);
+};
+
+export const disableProducto = async (id) => {
+  await api.patch(`/api/Productos/${id}/disable`);
+};
+
+ 
+// ===== CLIENTES =====
+export async function getClientes() {
+  const { data } = await api.get("/api/Clientes");
+  return data;
+}
+export async function createCliente(payload) {
+  const { data } = await api.post("/api/Clientes", payload);
+  return data;
+}
+export async function updateCliente(id, payload) {
+  const { data } = await api.put(`/api/Clientes/${id}`, payload);
+  return data;
+}
+export async function deleteCliente(id) {
+  const { data } = await api.delete(`/api/Clientes/${id}`);
+  return data;
+}
+
+export async function enableCliente(id) {
+  const { data } = await api.patch(`/api/Clientes/${id}/enable`);
+  return data;
+}
+
+export async function disableCliente(id) {
+  const { data } = await api.patch(`/api/Clientes/${id}/disable`);
+  return data;
+}
+export async function getClientesPaged(page, pageSize) {
+  const { data } = await api.get("/api/Clientes/paged", {
+    params: { page: page + 1, pageSize }, // ⚠️ si backend ya arranca en 1
+  });
+  return data; // { items: [...], totalCount: N }
+}
+
+
+// ===== PAISES / IMPUESTOS =====
+export async function getPaises() {
+  const { data } = await api.get("/api/Paises");
+  return data;
+}
+export async function getImpuestosPorPais(paisId) {
+  const { data } = await api.get(`/api/Impuestos/pais/${paisId}`);
+  return data;
+}
+
+// ===== PEDIDOS =====
+export async function getPedidos() {
+  const { data } = await api.get("/api/Pedidos");
+  return data;
+}
+export async function createPedido(payload) {
+  const { data } = await api.post("/api/Pedidos", payload);
+  return data;
+}
+export async function getPedidoById(id) {
+  const { data } = await api.get(`/api/Pedidos/${id}`);
+  return data;
+}
+export async function deletePedido(id) {
+  const { data } = await api.delete(`/api/Pedidos/${id}`);
+  return data;
 }

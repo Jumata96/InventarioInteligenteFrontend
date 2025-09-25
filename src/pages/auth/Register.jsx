@@ -1,128 +1,52 @@
-// src/pages/auth/Register.jsx
-import {
-  Container,
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  TextField,
-  Button,
-  Link,
-} from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { registerApi } from "../../api/endpoints";
+import { Box, Card, CardContent, TextField, Button, Typography } from "@mui/material";
 
 export default function Register() {
   const nav = useNavigate();
+  const [form, setForm] = useState({ email: "", password: "", cpass: "" });
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const password = data.get("password");
-    const password2 = data.get("password2");
-
-    if (password !== password2) {
-      alert("Las contraseñas no coinciden");
-      return;
+    if (form.password !== form.cpass) return alert("Las contraseñas no coinciden");
+    setLoading(true);
+    try {
+      await registerApi({ email: form.email, password: form.password });
+      alert("Usuario registrado, inicia sesión");
+      nav("/login");
+    } catch (err) {
+      alert(err?.response?.data?.message || "No se pudo registrar");
+    } finally {
+      setLoading(false);
     }
-
-    console.log({
-      email: data.get("email"),
-      password,
-    });
-
-    nav("/login");
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        padding: 2,
-      }}
-    >
-      <Container maxWidth="xs">
-        <Card
-          sx={{
-            borderRadius: 4,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <CardContent sx={{ p: 4 }}>
-            <Typography
-              variant="h4"
-              align="center"
-              gutterBottom
-              sx={{ fontWeight: 700, color: "#333" }}
-            >
-              Crear Cuenta
-            </Typography>
-            <Typography
-              align="center"
-              sx={{ color: "text.secondary", mb: 3 }}
-            >
-              Regístrate para acceder al sistema
-            </Typography>
-
-            <Box component="form" onSubmit={handleSubmit}>
-              <TextField
-                label="Correo electrónico"
-                name="email"
-                type="email"
-                fullWidth
-                required
-                margin="normal"
-              />
-              <TextField
-                label="Contraseña"
-                name="password"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-              />
-              <TextField
-                label="Confirmar contraseña"
-                name="password2"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-              />
-
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                sx={{
-                  mt: 2,
-                  py: 1.5,
-                  borderRadius: 3,
-                  background:
-                    "linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%)",
-                  "&:hover": {
-                    background:
-                      "linear-gradient(90deg, #fa5788 0%, #ff4da6 100%)",
-                  },
-                }}
-              >
-                Registrarse
-              </Button>
-
-              <Typography align="center" sx={{ mt: 2 }}>
-                ¿Ya tienes cuenta?{" "}
-                <Link href="/login" underline="hover" color="primary">
-                  Inicia sesión
-                </Link>
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-      </Container>
+    <Box sx={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)",
+    }}>
+      <Card sx={{ maxWidth: 460, p: 3, borderRadius: 3, boxShadow: 6 }}>
+        <CardContent>
+          <Typography variant="h5" gutterBottom>Registro de Usuario</Typography>
+          <form onSubmit={onSubmit}>
+            <TextField label="Correo" type="email" fullWidth sx={{ mb: 2 }}
+              value={form.email} onChange={(e)=>setForm({...form, email: e.target.value})}/>
+            <TextField label="Contraseña" type="password" fullWidth sx={{ mb: 2 }}
+              value={form.password} onChange={(e)=>setForm({...form, password: e.target.value})}/>
+            <TextField label="Confirmar contraseña" type="password" fullWidth sx={{ mb: 2 }}
+              value={form.cpass} onChange={(e)=>setForm({...form, cpass: e.target.value})}/>
+            <Button type="submit" fullWidth variant="contained" disabled={loading}>
+              {loading ? "Creando..." : "Registrarse"}
+            </Button>
+          </form>
+          <Typography variant="body2" sx={{ mt: 2, textAlign: "center" }}>
+            ¿Ya tienes cuenta? <Link to="/login">Inicia sesión</Link>
+          </Typography>
+        </CardContent>
+      </Card>
     </Box>
   );
 }
