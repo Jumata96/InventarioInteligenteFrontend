@@ -104,6 +104,17 @@ export async function createPedido(payload) {
   const { data } = await api.post("/api/Pedidos", payload);
   return data;
 }
+export async function getPedidosPaged(page, pageSize, query = "") {
+  const { data } = await api.get("/api/Pedidos/paged", {
+    params: {
+      page: page,
+      pageSize,
+      q: query || undefined,  
+    },
+  });
+  return data;
+}
+
 export async function getPedidoById(id) {
   const { data } = await api.get(`/api/Pedidos/${id}`);
   return data;
